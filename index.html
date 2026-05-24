@@ -1,0 +1,1991 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GeoPBB Dsn 3 - Sistem Pemetaan Objek PBB Dusun 3</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Leaflet GIS CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (XLSX) library for Import/Export Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Custom interactive map drawing cursor */
+        .drawing-active {
+            cursor: crosshair !important;
+        }
+        /* Touch friendly style adjustments */
+        button, select, input, textarea {
+            min-height: 40px;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans overflow-hidden select-none">
+
+    <!-- Header / Top Bar -->
+    <header class="bg-brand-900 text-white shadow-md flex-shrink-0 z-30">
+        <div class="px-4 py-3 sm:py-4 flex justify-between items-center gap-2">
+            <div class="flex items-center gap-2.5">
+                <!-- Hamburger Menu Button for Mobile -->
+                <button onclick="toggleSidebar()" class="md:hidden p-2 rounded-xl bg-brand-800 text-white hover:bg-brand-700 active:scale-95 transition-all flex items-center justify-center shrink-0" title="Buka Menu">
+                    <i data-lucide="menu" class="w-6 h-6"></i>
+                </button>
+                <div class="flex items-center gap-2">
+                    <div class="bg-sky-500 p-1.5 rounded-lg text-white hidden sm:block">
+                        <i data-lucide="map-pin" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-base sm:text-lg font-bold tracking-tight">GeoPBB Desa Suci <span class="text-[10px] sm:text-xs font-normal bg-sky-700 px-1.5 py-0.5 rounded ml-1">v2.5 Mobile</span></h1>
+                        <p class="text-[10px] text-sky-200 line-clamp-1">Peta Objek PBB Dusun 3</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quick Stats Summary / Help -->
+            <div class="flex items-center gap-2 text-xs">
+                <div class="bg-brand-800 px-3 py-1.5 rounded-lg border border-brand-700/50 hidden lg:flex gap-2 items-center">
+                    <div class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                    <span class="font-semibold text-white">PostGIS Spasial Aktif</span>
+                </div>
+                <button onclick="openHelpModal()" class="hover:bg-brand-800 active:scale-95 p-2 rounded-xl transition-all flex items-center justify-center text-white" title="Bantuan Penggunaan">
+                    <i data-lucide="help-circle" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="flex-1 flex overflow-hidden relative">
+        
+        <!-- Sidebar Backdrop (Mobile Only Overlay) -->
+        <div id="sidebar-backdrop" onclick="closeSidebar()" class="hidden fixed inset-0 bg-slate-900/60 z-30 md:hidden backdrop-blur-sm transition-opacity duration-300"></div>
+
+        <!-- SIDEBAR Kiri: Dashboard, Filter & List (Toggled on Mobile) -->
+        <section class="fixed md:relative inset-y-0 left-0 z-40 w-[85%] max-w-[360px] md:w-96 bg-white border-r border-slate-200 flex flex-col h-full shadow-2xl md:shadow-none transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out" id="sidebar">
+            
+            <!-- Mobile Sidebar Header with Close Button -->
+            <div class="flex md:hidden justify-between items-center px-4 py-3 bg-brand-900 text-white border-b border-brand-800 flex-shrink-0">
+                <span class="font-bold text-sm tracking-wide">Menu Navigasi</span>
+                <button onclick="closeSidebar()" class="p-1.5 hover:bg-brand-800 rounded-lg active:scale-95 transition-all">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Tab Menu -->
+            <div class="flex border-b border-slate-200 bg-slate-50 flex-shrink-0 text-xs overflow-x-auto">
+                <button onclick="switchTab('dashboard')" id="btn-tab-dashboard" class="flex-1 py-3 px-2 font-semibold border-b-2 border-sky-600 text-sky-600 flex items-center justify-center gap-1 min-w-[70px] transition-all">
+                    <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i> Dashboard
+                </button>
+                <button onclick="switchTab('list')" id="btn-tab-list" class="flex-1 py-3 px-2 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1 min-w-[70px] transition-all">
+                    <i data-lucide="database" class="w-3.5 h-3.5"></i> Objek
+                </button>
+                <button onclick="switchTab('ai')" id="btn-tab-ai" class="flex-1 py-3 px-2 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1 min-w-[70px] transition-all">
+                    <span class="relative flex h-2 w-2 mr-0.5">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+                    </span>
+                    AI
+                </button>
+                <button onclick="switchTab('excel')" id="btn-tab-excel" class="flex-1 py-3 px-2 font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1 min-w-[70px] transition-all">
+                    <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-600"></i> Excel
+                </button>
+            </div>
+
+            <!-- Tab Content Wrapper -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                
+                <!-- TAB DASHBOARD CONTENT -->
+                <div id="tab-dashboard" class="space-y-4">
+                    <!-- Quick Metrics Card -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-gradient-to-br from-sky-50 to-sky-100 p-3 rounded-xl border border-sky-200/50">
+                            <span class="text-[11px] text-sky-700 block font-medium">Realisasi PBB</span>
+                            <span class="text-base font-bold text-sky-950 mt-1 block" id="stat-total-pajak">Rp 0</span>
+                            <span class="text-[9px] text-sky-600 flex items-center gap-1 mt-1">
+                                <i data-lucide="trending-up" class="w-3 h-3"></i> +12.4% vs Th Lalu
+                            </span>
+                        </div>
+                        <div class="bg-gradient-to-br from-green-50 to-green-100 p-3 rounded-xl border border-green-200/50">
+                            <span class="text-[11px] text-green-700 block font-medium">Tingkat Kepatuhan</span>
+                            <span class="text-base font-bold text-green-950 mt-1 block" id="stat-kepatuhan">0%</span>
+                            <span class="text-[9px] text-green-600 flex items-center gap-1 mt-1">
+                                <i data-lucide="check" class="w-3 h-3"></i> Zona Hijau
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Target & Tunggakan Progress -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Realisasi Target Pendapatan</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between text-xs text-slate-600 mb-1">
+                                    <span>Target Rp 15.000.000</span>
+                                    <span class="font-bold text-slate-800" id="progress-percent">0%</span>
+                                </div>
+                                <div class="w-full bg-slate-200 rounded-full h-2.5">
+                                    <div class="bg-sky-600 h-2.5 rounded-full" style="width: 0%" id="progress-bar"></div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-center pt-2 border-t border-slate-200">
+                                <div>
+                                    <span class="text-[9px] text-slate-400 block uppercase">Tertagih (Lunas)</span>
+                                    <span class="text-xs font-semibold text-green-600" id="stat-lunas-amount">Rp 0</span>
+                                </div>
+                                <div>
+                                    <span class="text-[9px] text-slate-400 block uppercase">Tunggakan (Piutang)</span>
+                                    <span class="text-xs font-semibold text-red-600" id="stat-tunggakan-amount">Rp 0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chart Visualisasi Status Objek -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Rasio Kepatuhan Wajib Pajak</h3>
+                        <div class="relative h-44 flex justify-center items-center">
+                            <canvas id="complianceChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Klasifikasi Kelas Objek -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Distribusi Jenis Bidang</h3>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="flex items-center gap-2"><span class="w-3 h-3 bg-indigo-500 rounded-sm"></span>Residensial</span>
+                                <span class="font-bold text-slate-700" id="dist-residensial">0 Objek</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="flex items-center gap-2"><span class="w-3 h-3 bg-amber-500 rounded-sm"></span>Komersial (Toko/Ruko)</span>
+                                <span class="font-bold text-slate-700" id="dist-komersial">0 Objek</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="flex items-center gap-2"><span class="w-3 h-3 bg-emerald-500 rounded-sm"></span>Industri & Pabrik</span>
+                                <span class="font-bold text-slate-700" id="dist-industri">0 Objek</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="flex items-center gap-2"><span class="w-3 h-3 bg-slate-400 rounded-sm"></span>Lahan Kosong</span>
+                                <span class="font-bold text-slate-700" id="dist-lahan">0 Objek</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB LIST OBJEK PAJAK CONTENT -->
+                <div id="tab-list" class="space-y-4 hidden">
+                    <!-- Search Box -->
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <i data-lucide="search" class="w-4 h-4 text-slate-400"></i>
+                        </span>
+                        <input type="text" id="search-input" onkeyup="filterObjectList()" placeholder="Cari NOP atau Nama..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
+                    </div>
+
+                    <!-- Status Filter Badges -->
+                    <div class="flex gap-1 overflow-x-auto pb-1">
+                        <button onclick="setStatusFilter('semua')" id="filter-all" class="px-3 py-1 bg-sky-500 text-white rounded-full text-[11px] font-medium transition-colors shrink-0">Semua</button>
+                        <button onclick="setStatusFilter('Lunas')" id="filter-lunas" class="px-3 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full text-[11px] font-medium transition-colors shrink-0">Lunas</button>
+                        <button onclick="setStatusFilter('Menunggak')" id="filter-menunggak" class="px-3 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full text-[11px] font-medium transition-colors shrink-0">Menunggak</button>
+                        <button onclick="setStatusFilter('Potensi')" id="filter-potensi" class="px-3 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full text-[11px] font-medium transition-colors shrink-0">Potensi</button>
+                    </div>
+
+                    <!-- Dynamic List of Tax Objects -->
+                    <div class="space-y-2 max-h-[450px] overflow-y-auto" id="tax-objects-container">
+                        <!-- Dynamic list populated by JS -->
+                    </div>
+                </div>
+
+                <!-- TAB AI ASSISTANT (GEMINI) -->
+                <div id="tab-ai" class="space-y-4 hidden">
+                    <div class="bg-gradient-to-r from-violet-600 to-indigo-600 text-white p-4 rounded-xl shadow-md space-y-2">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="sparkles" class="w-5 h-5 text-amber-300"></i>
+                            <h3 class="font-bold text-sm">Gemini AI Tax Advisor</h3>
+                        </div>
+                        <p class="text-[11px] text-indigo-100 leading-relaxed">
+                            Gunakan model kecerdasan buatan untuk menganalisis potensi daerah atau membuat draf teguran instan secara otomatis.
+                        </p>
+                    </div>
+
+                    <!-- API Key Setting -->
+                    <div class="bg-slate-100 p-3 rounded-lg border border-slate-200 space-y-2">
+                        <details class="group">
+                            <summary class="text-xs font-semibold text-slate-700 cursor-pointer flex justify-between items-center">
+                                <span>Pengaturan API Key Gemini</span>
+                                <span class="text-[10px] text-sky-600 group-open:hidden">Klik untuk mengisi</span>
+                                <span class="text-[10px] text-slate-500 hidden group-open:block">Tutup</span>
+                            </summary>
+                            <div class="pt-2 space-y-1.5">
+                                <p class="text-[10px] text-slate-500">Biarkan kosong untuk menggunakan simulator cerdas bawaan.</p>
+                                <input type="password" id="gemini-api-key" placeholder="AIzaSy..." class="w-full p-2 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none">
+                            </div>
+                        </details>
+                    </div>
+
+                    <!-- AI Workflows -->
+                    <div class="space-y-3">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500">Alur Kerja Cepat AI</h4>
+                        
+                        <div onclick="prepAISubmission('surat')" class="p-3 bg-white border border-slate-200 rounded-xl hover:border-sky-500 hover:shadow-sm cursor-pointer transition-all space-y-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                                    <i data-lucide="mail-warning" class="w-4 h-4 text-rose-500"></i> Draf Surat Teguran PBB
+                                </span>
+                                <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+                            </div>
+                            <p class="text-[10px] text-slate-500">Buat draf resmi penagihan wajib pajak tertunggak dengan format administrasi hukum.</p>
+                        </div>
+
+                        <div onclick="prepAISubmission('analisis')" class="p-3 bg-white border border-slate-200 rounded-xl hover:border-sky-500 hover:shadow-sm cursor-pointer transition-all space-y-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                                    <i data-lucide="line-chart" class="w-4 h-4 text-emerald-500"></i> Optimasi Potensi Wilayah
+                                </span>
+                                <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i>
+                            </div>
+                            <p class="text-[10px] text-slate-500">Dapatkan ide strategi peningkatan kepatuhan dan Pendapatan Asli Daerah (PAD).</p>
+                        </div>
+                    </div>
+
+                    <!-- Prompt Box & AI Output -->
+                    <div class="border-t border-slate-200 pt-3 space-y-3">
+                        <div class="space-y-1">
+                            <label for="ai-prompt" class="text-xs font-bold text-slate-600 block">Kustomisasi Instruksi AI:</label>
+                            <textarea id="ai-prompt" rows="3" class="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-1 focus:ring-sky-500 focus:outline-none" placeholder="Tulis instruksi kustom Anda di sini..."></textarea>
+                        </div>
+                        <button onclick="generateAIAdvice()" id="ai-btn-submit" class="w-full bg-brand-600 hover:bg-brand-700 active:scale-95 text-white font-semibold py-2 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i> Jalankan Instruksi AI
+                        </button>
+
+                        <!-- AI Response Panel -->
+                        <div id="ai-response-panel" class="hidden space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-[11px] font-bold text-indigo-600 flex items-center gap-1">
+                                    <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span> Hasil Analisis AI
+                                </span>
+                                <button onclick="copyToClipboard('ai-output-text')" class="text-slate-400 hover:text-slate-600 p-1.5 rounded hover:bg-slate-100" title="Salin Jawaban">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
+                            <div id="ai-output-text" class="bg-indigo-50/70 p-3 rounded-lg border border-indigo-100 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
+                                <!-- Response populated by API -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB EXCEL INTEGRATION -->
+                <div id="tab-excel" class="space-y-4 hidden">
+                    <div class="bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 rounded-xl shadow-md space-y-2">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-200"></i>
+                            <h3 class="font-bold text-sm">Integrasi Data Excel</h3>
+                        </div>
+                        <p class="text-[11px] text-emerald-100 leading-relaxed">
+                            Kelola data spasial secara massal dengan dukungan ekspor filter, pengunduhan templat, dan sinkronisasi berkas.
+                        </p>
+                    </div>
+
+                    <!-- Filter & Ekspor Data Lunas Berdasarkan Rentang Tanggal -->
+                    <div class="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm space-y-3">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                            <i data-lucide="calendar-range" class="w-4 h-4 text-emerald-600"></i> Saring & Ekspor Data Lunas
+                        </h4>
+                        <p class="text-[10px] text-slate-500 leading-snug">Pilih rentang tanggal pembayaran PBB wajib pajak lunas yang ingin disaring.</p>
+                        
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label for="filter-date-start" class="block text-[9px] font-bold text-slate-500 uppercase mb-1">Mulai</label>
+                                <input type="date" id="filter-date-start" onchange="updateFilteredLunasCount()" class="w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label for="filter-date-end" class="block text-[9px] font-bold text-slate-500 uppercase mb-1">Selesai</label>
+                                <input type="date" id="filter-date-end" onchange="updateFilteredLunasCount()" class="w-full p-2 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                            </div>
+                        </div>
+
+                        <!-- Live Feed Filter Indicator -->
+                        <div id="filter-lunas-indicator" class="bg-emerald-50 text-emerald-800 text-[11px] p-2 rounded-lg border border-emerald-100 flex items-center justify-between">
+                            <span class="flex items-center gap-1">
+                                <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-600"></i>
+                                <span>Terdeteksi:</span>
+                            </span>
+                            <span id="filtered-lunas-count" class="font-bold text-xs">0 Objek</span>
+                        </div>
+
+                        <!-- Filtered Data Preview Table -->
+                        <div class="space-y-1.5">
+                            <span class="block text-[10px] font-bold text-slate-500 uppercase">Pratinjau Data Terfilter:</span>
+                            <div class="max-h-32 overflow-y-auto border border-slate-200 rounded-lg bg-slate-50">
+                                <table class="w-full text-[10px] text-left text-slate-600">
+                                    <thead class="bg-slate-100 text-[9px] uppercase font-bold text-slate-700 sticky top-0 z-10">
+                                        <tr>
+                                            <th class="px-2 py-1.5">Nama</th>
+                                            <th class="px-2 py-1.5 text-right">PBB (Rp)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="filtered-lunas-table-body">
+                                        <!-- Will be populated dynamically by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <button onclick="exportFilteredLunasExcel()" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-md">
+                            <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Ekspor Lunas Periodik
+                        </button>
+                    </div>
+
+                    <!-- Export Section Card -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                            <i data-lucide="download" class="w-4 h-4 text-emerald-600"></i> Ekspor Seluruh Basis Data
+                        </h4>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="exportToExcel()" class="bg-slate-700 hover:bg-slate-800 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm">
+                                <i data-lucide="file-down" class="w-4 h-4"></i> Ekspor Semua
+                            </button>
+                            <button onclick="downloadTemplateExcel()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors border border-slate-200">
+                                <i data-lucide="sheet" class="w-4 h-4 text-slate-500"></i> Templat Excel
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Import Section Card -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                            <i data-lucide="upload" class="w-4 h-4 text-sky-600"></i> Unggah & Sinkronisasi
+                        </h4>
+                        
+                        <!-- Import Mode Toggle -->
+                        <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-lg text-[10px]">
+                            <label class="flex items-center justify-center gap-1 p-1.5 rounded bg-white text-slate-700 shadow-sm cursor-pointer border border-slate-200/50 transition-all text-center">
+                                <input type="radio" name="import-mode" value="append" checked class="accent-sky-600">
+                                <span>Gabung (Append)</span>
+                            </label>
+                            <label class="flex items-center justify-center gap-1 p-1.5 rounded text-slate-500 cursor-pointer transition-all text-center">
+                                <input type="radio" name="import-mode" value="overwrite" class="accent-sky-600">
+                                <span>Ganti (Overwrite)</span>
+                            </label>
+                        </div>
+
+                        <!-- File Input Drag-Drop Area -->
+                        <div class="border-2 border-dashed border-slate-200 hover:border-sky-500 rounded-xl p-4 transition-all relative cursor-pointer bg-slate-50/50">
+                            <input type="file" id="excel-file-input" accept=".xlsx, .xls" onchange="handleExcelImport(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                            <div class="text-center space-y-1">
+                                <i data-lucide="upload-cloud" class="w-8 h-8 text-slate-400 mx-auto"></i>
+                                <span class="block text-xs font-bold text-slate-700">Pilih Berkas Excel</span>
+                            </div>
+                        </div>
+
+                        <!-- Import Summary / Log -->
+                        <div id="import-log-panel" class="hidden bg-slate-50 p-3 rounded-lg border border-slate-200 text-[10px] space-y-1">
+                            <div class="font-bold text-slate-700 flex justify-between">
+                                <span>Status Impor:</span>
+                                <span id="import-status-badge" class="text-emerald-600">Sukses</span>
+                            </div>
+                            <p class="text-slate-500" id="import-log-details"></p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- AREA UTAMA PETA (Full Screen) -->
+        <section class="flex-1 h-full relative z-10">
+            <!-- Leaflet Map Container -->
+            <div id="map" class="w-full h-full"></div>
+
+            <!-- FLOATING MAP CONTROLS (Mobile Friendly Touch Targets) -->
+            <div class="absolute bottom-6 right-4 z-[1000] flex flex-col gap-2.5">
+                <button onclick="startDrawingMode()" class="bg-brand-600 hover:bg-brand-700 active:scale-95 text-white font-bold w-12 h-12 md:w-auto md:px-4 rounded-full md:rounded-xl shadow-2xl flex items-center justify-center gap-2 transition-all border border-brand-500/30" title="Gambar Bidang Baru">
+                    <i data-lucide="pencil-ruler" class="w-5 h-5"></i>
+                    <span class="text-xs hidden md:inline">Gambar Bidang Baru</span>
+                </button>
+                <button onclick="getMyLocation()" class="bg-white hover:bg-slate-50 active:scale-95 text-sky-600 font-semibold w-12 h-12 md:w-auto md:px-3 rounded-full md:rounded-lg shadow-xl flex items-center justify-center gap-2 transition-all border border-slate-200" title="Lokasi Saya">
+                    <i data-lucide="navigation" class="w-5 h-5"></i>
+                    <span class="text-xs hidden md:inline">Lokasi Saya</span>
+                </button>
+                <button onclick="toggleSatelliteView()" id="btn-basemap" class="bg-white hover:bg-slate-50 active:scale-95 text-slate-700 font-semibold w-12 h-12 md:w-auto md:px-3 rounded-full md:rounded-lg shadow-xl flex items-center justify-center gap-2 transition-all border border-slate-200" title="Mode Satelit">
+                    <i data-lucide="layers" class="w-5 h-5 text-slate-500"></i>
+                    <span id="basemap-text" class="text-xs hidden md:inline">Mode Citra Satelit</span>
+                </button>
+                <button onclick="resetMapView()" class="bg-white hover:bg-slate-50 active:scale-95 text-slate-700 font-semibold w-12 h-12 md:w-auto md:px-3 rounded-full md:rounded-lg shadow-xl flex items-center justify-center gap-2 transition-all border border-slate-200" title="Pusatkan Peta">
+                    <i data-lucide="maximize" class="w-5 h-5 text-slate-500"></i>
+                    <span class="text-xs hidden md:inline">Pusatkan Peta</span>
+                </button>
+            </div>
+
+            <!-- DRAWING HUD (Floating Warning Panel - Mobile Friendly Layout) -->
+            <div id="drawing-hud" class="hidden absolute top-4 left-4 right-4 md:left-1/2 md:right-auto md:transform md:-translate-x-1/2 z-[1000] bg-amber-50 border border-amber-200 rounded-2xl p-3.5 shadow-2xl flex flex-col sm:flex-row items-center gap-3">
+                <div class="flex items-center gap-2.5 w-full sm:w-auto">
+                    <div class="bg-amber-100 p-2 rounded-xl text-amber-700">
+                        <i data-lucide="info" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="text-xs font-bold text-amber-900">Mode Gambar Spasial</h5>
+                        <p class="text-[10px] text-amber-700 leading-snug">Sentuh peta untuk menggambar persil tanah.</p>
+                    </div>
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto justify-end">
+                    <button onclick="cancelDrawing()" class="flex-1 sm:flex-none px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-[11px] transition-all">
+                        Batal
+                    </button>
+                    <button onclick="finishDrawing()" class="flex-1 sm:flex-none px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-[11px] shadow transition-all">
+                        Selesai
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL FORM OBJEK PAJAK BARU / EDIT (Responsive) -->
+    <div id="object-form-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 flex flex-col my-8 animate-scale-up">
+            <!-- Modal Header -->
+            <div class="bg-brand-900 text-white px-5 py-4 flex justify-between items-center flex-shrink-0">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="file-plus-2" class="w-5 h-5 text-sky-400"></i>
+                    <h3 class="font-bold text-sm sm:text-base" id="modal-title-text">Registrasi Spasial Objek PBB</h3>
+                </div>
+                <button onclick="closeObjectModal()" class="p-1 text-white/80 hover:text-white active:scale-95 transition-all">
+                    <i data-lucide="x" class="w-5.5 h-5.5"></i>
+                </button>
+            </div>
+
+            <!-- Modal Body (Form) -->
+            <form id="pbb-form" onsubmit="saveNewObject(event)" class="p-5 overflow-y-auto max-h-[70vh] space-y-4">
+                <div class="bg-amber-50 p-3 rounded-xl border border-amber-100 flex items-start gap-2.5">
+                    <i data-lucide="info" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+                    <p class="text-[10px] sm:text-[11px] text-amber-800 leading-normal" id="form-info-coordinates">
+                        Batas wilayah dipetakan. Estimasi luas tanah: <strong id="calculated-area-text">0 m²</strong>.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-nop">Nomor Objek Pajak (NOP) *</label>
+                        <input type="text" id="form-nop" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-nama">Nama Wajib Pajak (Pemilik) *</label>
+                        <input type="text" id="form-nama" required placeholder="Nama Lengkap" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-alamat">Alamat Objek Pajak *</label>
+                        <textarea id="form-alamat" required placeholder="Alamat lengkap lokasi bidang" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-luas-bumi">Luas Bumi (m²)</label>
+                        <input type="number" id="form-luas-bumi" onchange="calculateEstimatedTax()" required class="w-full px-3 py-2 border border-slate-300 bg-slate-50 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none" readonly>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-luas-bang">Luas Bangunan (m²)</label>
+                        <input type="number" id="form-luas-bang" onchange="calculateEstimatedTax()" required placeholder="0" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-njop-bumi">NJOP Bumi / m² (Rp)</label>
+                        <input type="number" id="form-njop-bumi" onchange="calculateEstimatedTax()" value="1500000" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-njop-bang">NJOP Bang / m² (Rp)</label>
+                        <input type="number" id="form-njop-bang" onchange="calculateEstimatedTax()" value="1200000" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-klasifikasi">Klasifikasi Objek</label>
+                        <select id="form-klasifikasi" class="w-full px-3 py-1.5 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                            <option value="Residensial">Residensial</option>
+                            <option value="Komersial">Komersial</option>
+                            <option value="Industri">Industri</option>
+                            <option value="Lahan Kosong">Lahan Kosong</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1" for="form-status">Status Pembayaran</label>
+                        <select id="form-status" onchange="toggleTanggalBayarInput()" class="w-full px-3 py-1.5 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                            <option value="Lunas" class="text-green-600 font-semibold">Lunas</option>
+                            <option value="Menunggak" class="text-red-600 font-semibold">Menunggak</option>
+                            <option value="Potensi" class="text-amber-600 font-semibold">Potensi</option>
+                        </select>
+                    </div>
+                    <div id="form-tanggal-bayar-container" class="col-span-2">
+                        <label class="block text-xs font-bold text-emerald-800 mb-1 flex items-center gap-1" for="form-tanggal-bayar">
+                            <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-600"></i> Tanggal Pembayaran PBB *
+                        </label>
+                        <input type="date" id="form-tanggal-bayar" class="w-full px-3 py-2 border border-emerald-300 focus:ring-2 focus:ring-emerald-500 bg-emerald-50/30 rounded-xl text-sm focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Live Tax Estimation -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 mt-2 space-y-1">
+                    <div class="flex justify-between text-xs text-slate-500">
+                        <span>Total Nilai NJOP:</span>
+                        <span class="font-medium text-slate-700" id="tax-total-njop">Rp 0</span>
+                    </div>
+                    <div class="flex justify-between text-xs text-slate-500">
+                        <span>Dasar Pengenaan PBB:</span>
+                        <span class="font-medium text-slate-700" id="tax-dpp">Rp 0</span>
+                    </div>
+                    <div class="flex justify-between text-sm text-slate-900 pt-2 border-t border-slate-200 font-bold">
+                        <span>PBB Terutang / Th:</span>
+                        <span class="text-brand-600" id="tax-estimation">Rp 0</span>
+                    </div>
+                </div>
+
+                <!-- Form Controls -->
+                <div class="flex gap-2.5 justify-end pt-3">
+                    <button type="button" onclick="closeObjectModal()" class="flex-1 sm:flex-none px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-sm transition-colors">
+                        Batal
+                    </button>
+                    <button type="submit" class="flex-1 sm:flex-none px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl text-sm shadow-md transition-colors">
+                        Simpan ke Peta
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION SYSTEM (Fully Responsive) -->
+    <div id="toast-container" class="fixed bottom-6 left-4 right-4 md:left-6 md:right-auto z-[9999] flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+    <!-- CUSTOM CONFIRMATION DELETE MODAL -->
+    <div id="confirm-delete-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200 p-6 space-y-4 animate-scale-up">
+            <div class="flex items-center gap-3 text-rose-600">
+                <div class="bg-rose-100 p-2.5 rounded-xl">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+                <h3 class="font-bold text-lg text-slate-800">Hapus Objek Pajak?</h3>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">Apakah Anda yakin ingin menghapus objek pajak milik <strong id="delete-object-name" class="text-slate-800"></strong>? Bidang tanah juga akan terhapus secara permanen.</p>
+            <div class="flex gap-2.5 pt-2">
+                <button onclick="closeDeleteModal()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition-all">
+                    Batal
+                </button>
+                <button onclick="executeDelete()" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow transition-all">
+                    Ya, Hapus
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- INSTRUCTION & HELP MODAL -->
+    <div id="help-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-scale-up">
+            <div class="bg-brand-900 text-white px-5 py-4 flex justify-between items-center">
+                <h3 class="font-bold text-sm sm:text-base flex items-center gap-2">
+                    <i data-lucide="help-circle" class="w-5 h-5 text-sky-400"></i> Panduan Penggunaan GeoPBB
+                </h3>
+                <button onclick="closeHelpModal()" class="text-white/80 hover:text-white">
+                    <i data-lucide="x" class="w-5.5 h-5.5"></i>
+                </button>
+            </div>
+            <div class="p-5 sm:p-6 space-y-4 text-xs sm:text-sm text-slate-600 leading-relaxed max-h-[75vh] overflow-y-auto">
+                <p>Selamat datang di <strong>Sistem Geospasial GeoPBB</strong>. Di sini Anda dapat memetakan, menganalisis, dan memperbarui basis data Pajak Bumi & Bangunan secara visual melalui ponsel Anda.</p>
+                <div class="space-y-2">
+                    <h4 class="font-bold text-slate-800">Cara Menggambar Persil Tanah Baru:</h4>
+                    <ul class="list-decimal pl-5 space-y-1">
+                        <li>Ketuk ikon <strong class="text-brand-600">Pencil Ruler</strong> di kanan bawah peta.</li>
+                        <li>Ketuk beberapa titik pada layar peta untuk membuat batas poligon tanah.</li>
+                        <li>Ketuk tombol <strong class="text-emerald-600">Selesai</strong> pada panel kuning di atas.</li>
+                        <li>Lengkapi data wajib pajak pada formulir yang muncul untuk menyimpan!</li>
+                    </ul>
+                </div>
+                <div class="space-y-2">
+                    <h4 class="font-bold text-slate-800">Interaksi Mobile:</h4>
+                    <p>Ketuk pada bidang tanah berwarna di peta untuk memunculkan ringkasan detail wajib pajak, estimasi nilai, dan modul pembuatan surat asisten AI.</p>
+                </div>
+                <button onclick="closeHelpModal()" class="w-full py-3 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white font-semibold rounded-xl text-xs transition-all shadow-md">
+                    Mulai Eksplorasi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script>
+        // Global State & Data Mock Objek Pajak Bumi & Bangunan di area Kota Bandung (Cicadas & sekitarnya)
+        let map;
+        let userLocationMarker = null; // Penampung marker lokasi pengguna
+        let complianceChartInstance;
+        let activeFilter = 'semua';
+        let currentTab = 'dashboard';
+        let isSatelliteView = false;
+        let isDrawingMode = false;
+        let currentDrawCoords = [];
+        let drawMarkers = [];
+        let drawPolygonLine = null;
+        let baseLayers = {};
+        let editingObjectId = null; // Menyimpan ID objek yang sedang diedit
+        let deleteTargetId = null;   // Menyimpan ID objek yang akan dihapus
+        
+        // Mocking Data Awal Wajib Pajak Spasial dengan tanggal bayar bawaan untuk PBB Lunas
+        let pbbDatabase = [
+            {
+                id: 1,
+                nop: "32.73.010.002.015-0111.0",
+                nama: "Rochmat Atmawijaya",
+                alamat: "Jl. Merdeka Baru No. 4, Babakan Surabaya",
+                luas_bumi: 320,
+                luas_bangunan: 180,
+                njop_bumi: 2200000,
+                njop_bangunan: 1500000,
+                status: "Lunas",
+                tanggal_bayar: "2026-05-10",
+                klasifikasi: "Residensial",
+                coords: [
+                    [-6.9180, 107.6320],
+                    [-6.9180, 107.6335],
+                    [-6.9190, 107.6335],
+                    [-6.9190, 107.6320]
+                ]
+            },
+            {
+                id: 2,
+                nop: "32.73.010.002.015-0120.0",
+                nama: "Siti Rahmawati",
+                alamat: "Jl. Merdeka Baru No. 12, Babakan Surabaya",
+                luas_bumi: 210,
+                luas_bangunan: 120,
+                njop_bumi: 2200000,
+                njop_bangunan: 1500000,
+                status: "Menunggak",
+                tanggal_bayar: "",
+                klasifikasi: "Residensial",
+                coords: [
+                    [-6.9192, 107.6315],
+                    [-6.9192, 107.6328],
+                    [-6.9200, 107.6328],
+                    [-6.9200, 107.6315]
+                ]
+            },
+            {
+                id: 3,
+                nop: "32.73.010.002.015-0135.0",
+                nama: "PT Jaya Makmur Logistik",
+                alamat: "Kawasan Pergudangan No. 50, Kiaracondong",
+                luas_bumi: 1200,
+                luas_bangunan: 850,
+                njop_bumi: 3500000,
+                njop_bangunan: 2000000,
+                status: "Lunas",
+                tanggal_bayar: "2026-05-18",
+                klasifikasi: "Industri",
+                coords: [
+                    [-6.9175, 107.6345],
+                    [-6.9175, 107.6365],
+                    [-6.9190, 107.6365],
+                    [-6.9190, 107.6345]
+                ]
+            },
+            {
+                id: 4,
+                nop: "32.73.010.002.015-0144.0",
+                nama: "Harlan Sumantri (Toko Elektronik)",
+                alamat: "Jl. Ibrahim Adjie No. 102, Cicadas",
+                luas_bumi: 450,
+                luas_bangunan: 380,
+                njop_bumi: 4000000,
+                njop_bangunan: 2500000,
+                status: "Menunggak",
+                tanggal_bayar: "",
+                klasifikasi: "Komersial",
+                coords: [
+                    [-6.9205, 107.6332],
+                    [-6.9205, 107.6348],
+                    [-6.9215, 107.6348],
+                    [-6.9215, 107.6332]
+                ]
+            },
+            {
+                id: 5,
+                nop: "32.73.010.002.015-0999.0",
+                nama: "Kawasan Sisa Girik Terbuka",
+                alamat: "Lahan Kosong Samping Gang Haji, Cicadas",
+                luas_bumi: 800,
+                luas_bangunan: 0,
+                njop_bumi: 1800000,
+                njop_bangunan: 0,
+                status: "Potensi",
+                tanggal_bayar: "",
+                klasifikasi: "Lahan Kosong",
+                coords: [
+                    [-6.9165, 107.6310],
+                    [-6.9165, 107.6318],
+                    [-6.9172, 107.6318],
+                    [-6.9172, 107.6310]
+                ]
+            }
+        ];
+
+        // Store active map layer references key = object id, value = Leaflet polygon
+        let mapLayers = {};
+
+        // Window On Load Initialization
+        window.onload = function() {
+            lucide.createIcons();
+            initMap();
+            populateDatabase();
+            updateStatistics();
+            initCharts();
+            initFilterDates();
+            
+            // Show welcome instructions
+            setTimeout(() => {
+                openHelpModal();
+            }, 600);
+        };
+
+        // MOBILE SIDEBAR CONTROLS
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            
+            sidebar.classList.toggle('-translate-x-full');
+            if (sidebar.classList.contains('-translate-x-full')) {
+                backdrop.classList.add('hidden');
+            } else {
+                backdrop.classList.remove('hidden');
+            }
+            
+            // Re-render map size as layout modifies
+            setTimeout(() => {
+                if (map) map.invalidateSize();
+            }, 300);
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            
+            sidebar.classList.add('-translate-x-full');
+            backdrop.classList.add('hidden');
+            
+            setTimeout(() => {
+                if (map) map.invalidateSize();
+            }, 300);
+        }
+
+        // Initialize default dates on the filter page
+        function initFilterDates() {
+            const today = new Date();
+            const lastMonth = new Date();
+            lastMonth.setMonth(today.getMonth() - 1);
+            
+            const formatDate = (date) => {
+                const d = new Date(date);
+                let month = '' + (d.getMonth() + 1);
+                let day = '' + d.getDate();
+                const year = d.getFullYear();
+
+                if (month.length < 2) month = '0' + month;
+                if (day.length < 2) day = '0' + day;
+
+                return [year, month, day].join('-');
+            };
+
+            document.getElementById('filter-date-start').value = formatDate(lastMonth);
+            document.getElementById('filter-date-end').value = formatDate(today);
+            
+            updateFilteredLunasCount();
+        }
+
+        // Live calculation and visual rendering of Lunas tax objects matching selected dates
+        function updateFilteredLunasCount() {
+            const startDate = document.getElementById('filter-date-start').value;
+            const endDate = document.getElementById('filter-date-end').value;
+            const countBadge = document.getElementById('filtered-lunas-count');
+            const tableBody = document.getElementById('filtered-lunas-table-body');
+
+            if (!startDate || !endDate) {
+                countBadge.innerText = "0 Objek";
+                tableBody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-slate-400">Pilih tanggal</td></tr>';
+                return;
+            }
+
+            const filteredLunas = pbbDatabase.filter(obj => {
+                if (obj.status !== 'Lunas' || !obj.tanggal_bayar) return false;
+                return obj.tanggal_bayar >= startDate && obj.tanggal_bayar <= endDate;
+            });
+
+            countBadge.innerText = `${filteredLunas.length} Objek`;
+
+            tableBody.innerHTML = '';
+            if (filteredLunas.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-slate-400">Tidak ada data lunas</td></tr>';
+                return;
+            }
+
+            filteredLunas.forEach(obj => {
+                const taxVal = calculatePBB(obj.luas_bumi, obj.luas_bangunan, obj.njop_bumi, obj.njop_bangunan);
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-100 hover:bg-slate-100/60 transition-colors";
+                tr.innerHTML = `
+                    <td class="px-2 py-1.5 font-medium text-slate-800 truncate max-w-[120px]">${obj.nama}</td>
+                    <td class="px-2 py-1.5 text-right font-semibold text-emerald-600">${formatRupiah(taxVal)}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Export only Lunas data in filtered period to Excel
+        function exportFilteredLunasExcel() {
+            const startDate = document.getElementById('filter-date-start').value;
+            const endDate = document.getElementById('filter-date-end').value;
+
+            if (!startDate || !endDate) {
+                showToast("Silakan tentukan rentang tanggal", "warning");
+                return;
+            }
+
+            const filteredLunas = pbbDatabase.filter(obj => {
+                if (obj.status !== 'Lunas' || !obj.tanggal_bayar) return false;
+                return obj.tanggal_bayar >= startDate && obj.tanggal_bayar <= endDate;
+            });
+
+            if (filteredLunas.length === 0) {
+                showToast("Tidak ada data pembayaran lunas di rentang tersebut", "warning");
+                return;
+            }
+
+            try {
+                const dataToExport = filteredLunas.map(obj => ({
+                    'NOP': obj.nop,
+                    'Nama Wajib Pajak': obj.nama,
+                    'Alamat Objek': obj.alamat,
+                    'Luas Bumi (m2)': obj.luas_bumi,
+                    'Luas Bangunan (m2)': obj.luas_bangunan,
+                    'NJOP Bumi (Rp)': obj.njop_bumi,
+                    'NJOP Bangunan (Rp)': obj.njop_bangunan,
+                    'Status PBB': obj.status,
+                    'Tanggal Pembayaran': obj.tanggal_bayar,
+                    'Klasifikasi': obj.klasifikasi,
+                    'PBB Terutang (Rp)': calculatePBB(obj.luas_bumi, obj.luas_bangunan, obj.njop_bumi, obj.njop_bangunan)
+                }));
+
+                const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Realisasi Lunas");
+
+                const filename = `GeoPBB_Lunas_${startDate}_sd_${endDate}.xlsx`;
+                XLSX.writeFile(workbook, filename);
+                
+                showToast(`Ekspor ${filteredLunas.length} data sukses!`, "success");
+            } catch (err) {
+                console.error(err);
+                showToast("Gagal mengekspor laporan lunas", "error");
+            }
+        }
+
+        // SWITCH SIDEBAR TABS
+        function switchTab(tabName) {
+            currentTab = tabName;
+            
+            ['dashboard', 'list', 'ai', 'excel'].forEach(tab => {
+                const container = document.getElementById(`tab-${tab}`);
+                const btn = document.getElementById(`btn-tab-${tab}`);
+                
+                if (tab === tabName) {
+                    if (container) container.classList.remove('hidden');
+                    if (btn) {
+                        btn.classList.add('border-sky-600', 'text-sky-600');
+                        btn.classList.remove('border-transparent', 'text-slate-500');
+                    }
+                } else {
+                    if (container) container.classList.add('hidden');
+                    if (btn) {
+                        btn.classList.remove('border-sky-600', 'text-sky-600');
+                        btn.classList.add('border-transparent', 'text-slate-500');
+                    }
+                }
+            });
+            
+            if (tabName === 'excel') {
+                updateFilteredLunasCount();
+            }
+        }
+
+        // EXCEL EXPORT LOGIC
+        function exportToExcel() {
+            try {
+                const dataToExport = pbbDatabase.map(obj => ({
+                    'ID': obj.id,
+                    'NOP': obj.nop,
+                    'Nama Wajib Pajak': obj.nama,
+                    'Alamat Objek': obj.alamat,
+                    'Luas Bumi (m2)': obj.luas_bumi,
+                    'Luas Bangunan (m2)': obj.luas_bangunan,
+                    'NJOP Bumi (Rp)': obj.njop_bumi,
+                    'NJOP Bangunan (Rp)': obj.njop_bangunan,
+                    'Status PBB': obj.status,
+                    'Tanggal Pembayaran': obj.tanggal_bayar || '-',
+                    'Klasifikasi': obj.klasifikasi,
+                    'Koordinat Spasial': JSON.stringify(obj.coords)
+                }));
+
+                const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Data Objek PBB");
+
+                XLSX.writeFile(workbook, `GeoPBB_Sistem_Database.xlsx`);
+                showToast("Database berhasil diekspor ke Excel!", "success");
+            } catch (error) {
+                console.error(error);
+                showToast("Gagal melakukan ekspor data", "error");
+            }
+        }
+
+        // DOWNLOAD EXCEL TEMPLATE LOGIC
+        function downloadTemplateExcel() {
+            try {
+                const templateData = [
+                    {
+                        'NOP': '32.73.010.002.015-0990.0',
+                        'Nama Wajib Pajak': 'Contoh Wajib Pajak Baru',
+                        'Alamat Objek': 'Jl. Cicadas Tengah No. 20',
+                        'Luas Bumi (m2)': 150,
+                        'Luas Bangunan (m2)': 90,
+                        'NJOP Bumi per m2 (Rp)': 2000000,
+                        'NJOP Bangunan per m2 (Rp)': 1200000,
+                        'Status PBB': 'Lunas', 
+                        'Tanggal Pembayaran': '2026-05-20',
+                        'Klasifikasi': 'Residensial',
+                        'Koordinat Spasial (JSON)': '[[-6.9185,107.6315],[-6.9185,107.6325],[-6.9195,107.6325],[-6.9195,107.6315]]'
+                    }
+                ];
+
+                const worksheet = XLSX.utils.json_to_sheet(templateData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Template_Pengisian");
+
+                XLSX.writeFile(workbook, "Template_Registrasi_Objek_PBB.xlsx");
+                showToast("Templat Excel berhasil diunduh!", "success");
+            } catch (error) {
+                console.error(error);
+                showToast("Gagal mengunduh templat", "error");
+            }
+        }
+
+        // EXCEL IMPORT PROCESSING
+        function handleExcelImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                    if (jsonData.length === 0) {
+                        throw new Error("Berkas Excel kosong.");
+                    }
+
+                    const importMode = document.querySelector('input[name="import-mode"]:checked').value;
+                    let startingId = importMode === 'overwrite' ? 1 : pbbDatabase.length + 1;
+                    const parsedObjects = [];
+
+                    jsonData.forEach((row, index) => {
+                        const nop = row['NOP'] || row['nop'] || `32.73.010.002.015-0${Math.floor(100+Math.random()*800)}.0`;
+                        const nama = row['Nama Wajib Pajak'] || row['nama'] || `Wajib Pajak ${index+1}`;
+                        const alamat = row['Alamat Objek'] || row['alamat'] || 'Kota Bandung';
+                        const luasBumi = parseFloat(row['Luas Bumi (m2)'] || row['luas_bumi'] || 100);
+                        const luasBang = parseFloat(row['Luas Bangunan (m2)'] || row['luas_bangunan'] || 0);
+                        const njopBumi = parseFloat(row['NJOP Bumi per m2 (Rp)'] || row['njop_bumi'] || 1500000);
+                        const njopBang = parseFloat(row['NJOP Bangunan per m2 (Rp)'] || row['njop_bangunan'] || 1200000);
+                        const status = row['Status PBB'] || row['status'] || 'Lunas';
+                        const tglBayar = row['Tanggal Pembayaran'] || row['tanggal_bayar'] || '';
+                        const klasifikasi = row['Klasifikasi'] || row['klasifikasi'] || 'Residensial';
+                        
+                        let coords = [];
+                        const coordsStr = row['Koordinat Spasial (JSON)'] || row['coords'] || '';
+                        try {
+                            if (coordsStr) {
+                                coords = JSON.parse(coordsStr);
+                            } else {
+                                coords = generateFallbackCoords();
+                            }
+                        } catch (err) {
+                            coords = generateFallbackCoords();
+                        }
+
+                        parsedObjects.push({
+                            id: startingId++,
+                            nop: nop,
+                            nama: nama,
+                            alamat: alamat,
+                            luas_bumi: luasBumi,
+                            luas_bangunan: luasBang,
+                            njop_bumi: njopBumi,
+                            njop_bangunan: njopBang,
+                            status: status,
+                            tanggal_bayar: status === 'Lunas' ? tglBayar : '',
+                            klasifikasi: klasifikasi,
+                            coords: coords
+                        });
+                    });
+
+                    if (importMode === 'overwrite') {
+                        clearAllMapLayers();
+                        pbbDatabase = parsedObjects;
+                    } else {
+                        pbbDatabase = pbbDatabase.concat(parsedObjects);
+                    }
+
+                    parsedObjects.forEach(obj => {
+                        renderObjectOnMap(obj);
+                    });
+
+                    populateDatabase();
+                    updateStatistics();
+                    updateCharts();
+                    updateFilteredLunasCount();
+
+                    const logPanel = document.getElementById('import-log-panel');
+                    const logDetails = document.getElementById('import-log-details');
+                    const logBadge = document.getElementById('import-status-badge');
+
+                    logPanel.classList.remove('hidden');
+                    logBadge.innerText = "Sukses";
+                    logBadge.className = "text-emerald-600 font-bold";
+                    logDetails.innerText = `${parsedObjects.length} Objek diimpor (${importMode}).`;
+
+                    showToast(`Sukses memproses ${parsedObjects.length} data`, "success");
+                    switchTab('dashboard'); 
+                    closeSidebar();
+
+                } catch (error) {
+                    console.error(error);
+                    showToast("Impor dibatalkan. Struktur tidak cocok.", "error");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+
+        function clearAllMapLayers() {
+            Object.keys(mapLayers).forEach(id => {
+                if (mapLayers[id]) {
+                    map.removeLayer(mapLayers[id]);
+                }
+            });
+            mapLayers = {};
+        }
+
+        function generateFallbackCoords() {
+            const center = map.getCenter();
+            const offset = 0.0004 + Math.random() * 0.0004;
+            return [
+                [center.lat - offset, center.lng - offset],
+                [center.lat - offset, center.lng + offset],
+                [center.lat + offset, center.lng + offset],
+                [center.lat + offset, center.lng - offset]
+            ];
+        }
+
+        // MAP INITIALIZATION
+        function initMap() {
+            const centerBandung = [-6.9185, 107.6335];
+            
+            map = L.map('map', {
+                center: centerBandung,
+                zoom: 16,
+                zoomControl: false,
+                tap: false // Disable tap handler conflict with clicks on android browsers
+            });
+
+            // Handler GPS
+            map.on('locationfound', function(e) {
+                if (userLocationMarker) {
+                    map.removeLayer(userLocationMarker);
+                }
+                userLocationMarker = L.circle(e.latlng, {
+                    radius: e.accuracy / 2,
+                    color: '#0284c7',
+                    fillColor: '#38bdf8',
+                    fillOpacity: 0.5
+                }).addTo(map);
+                
+                showToast("Lokasi Anda ditemukan", "success");
+            });
+
+            map.on('locationerror', function(e) {
+                showToast("Gagal mendapatkan lokasi: " + e.message, "error");
+            });
+
+            baseLayers.streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+
+            baseLayers.satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Esri'
+            });
+
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+            map.on('click', handleMapClick);
+        }
+
+        function toggleSatelliteView() {
+            const btnText = document.getElementById('basemap-text');
+            
+            if (!isSatelliteView) {
+                map.removeLayer(baseLayers.streets);
+                baseLayers.satellite.addTo(map);
+                btnText.innerText = "Mode Peta Jalanan";
+                isSatelliteView = true;
+                showToast("Tampilan Citra Satelit aktif", "info");
+            } else {
+                map.removeLayer(baseLayers.satellite);
+                baseLayers.streets.addTo(map);
+                btnText.innerText = "Mode Citra Satelit";
+                isSatelliteView = false;
+                showToast("Tampilan Peta Jalanan aktif", "info");
+            }
+        }
+
+        function resetMapView() {
+            map.setView([-6.9185, 107.6335], 16);
+            showToast("Pusatkan koordinat spasial", "info");
+        }
+
+        // Fungsi GPS Manual
+        function getMyLocation() {
+            map.locate({setView: true, maxZoom: 16});
+        }
+
+        // RENDER OBJECT TO MAP LAYER
+        function renderObjectOnMap(obj) {
+            let styleColor = "#10b981"; // Lunas
+            if (obj.status === "Menunggak") {
+                styleColor = "#f43f5e"; // Menunggak
+            } else if (obj.status === "Potensi") {
+                styleColor = "#f59e0b"; // Potensi
+            }
+
+            const polygonStyle = {
+                color: styleColor,
+                fillColor: styleColor,
+                fillOpacity: 0.35,
+                weight: 2.5,
+                opacity: 0.9,
+                dashArray: obj.status === "Potensi" ? "5, 5" : "0"
+            };
+
+            const calculatedTax = calculatePBB(obj.luas_bumi, obj.luas_bangunan, obj.njop_bumi, obj.njop_bangunan);
+            
+            const popupContent = `
+                <div class="p-2 font-sans min-w-[200px] space-y-2 text-slate-800">
+                    <div class="flex justify-between items-center border-b border-slate-100 pb-1">
+                        <span class="text-[9px] font-bold text-slate-400 block">OBJEK PBB</span>
+                        <span class="px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                            obj.status === 'Lunas' ? 'bg-emerald-100 text-emerald-800' : 
+                            obj.status === 'Menunggak' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                        }">${obj.status}</span>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-bold text-slate-900 line-clamp-1">${obj.nama}</h4>
+                        <span class="text-[9px] text-sky-600 font-mono select-all">${obj.nop}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-1 text-[9px] bg-slate-50 p-1.5 rounded-lg">
+                        <div>
+                            <span class="text-slate-400 block">Bumi</span>
+                            <span class="font-bold">${obj.luas_bumi} m²</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 block">Bangunan</span>
+                            <span class="font-bold">${obj.luas_bangunan} m²</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center text-[10px] bg-slate-100/50 p-1.5 rounded">
+                        <span class="text-slate-500">Ketetapan:</span>
+                        <span class="font-extrabold text-brand-700">${formatRupiah(calculatedTax)}</span>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="editObject(${obj.id}, event)" class="flex-1 py-1 px-2 bg-brand-50 hover:bg-brand-100 text-brand-700 text-[10px] font-bold rounded-lg text-center transition-all">
+                            Ubah
+                        </button>
+                        ${obj.status === 'Menunggak' ? `
+                        <button onclick="triggerAISuratTeguran('${obj.nop}')" class="py-1 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-lg text-center transition-all">
+                            Teguran AI
+                        </button>` : ''}
+                    </div>
+                </div>
+            `;
+
+            const leafletPolygon = L.polygon(obj.coords, polygonStyle)
+                .bindPopup(popupContent)
+                .on('click', function() {
+                    this.setStyle({ fillOpacity: 0.55 });
+                });
+
+            leafletPolygon.addTo(map);
+            mapLayers[obj.id] = leafletPolygon;
+        }
+
+        // GIS INTERACTIVE DRAWING MODE
+        function startDrawingMode() {
+            isDrawingMode = true;
+            currentDrawCoords = [];
+            clearDrawEnvironment();
+            closeSidebar();
+            
+            document.getElementById('map').classList.add('drawing-active');
+            document.getElementById('drawing-hud').classList.remove('hidden');
+            showToast("Sentuh titik peta untuk menggambar batas", "info");
+        }
+
+        function handleMapClick(e) {
+            if (!isDrawingMode) return;
+
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+            currentDrawCoords.push([lat, lng]);
+
+            const marker = L.circleMarker([lat, lng], {
+                radius: 6,
+                color: '#d97706',
+                fillColor: '#fbbf24',
+                fillOpacity: 1,
+                weight: 2
+            }).addTo(map);
+            
+            drawMarkers.push(marker);
+
+            if (drawPolygonLine) {
+                map.removeLayer(drawPolygonLine);
+            }
+            if (currentDrawCoords.length > 1) {
+                drawPolygonLine = L.polygon(currentDrawCoords, {
+                    color: '#fbbf24',
+                    fillColor: '#f59e0b',
+                    fillOpacity: 0.2,
+                    weight: 2,
+                    dashArray: '5, 5'
+                }).addTo(map);
+            }
+        }
+
+        function finishDrawing() {
+            if (currentDrawCoords.length < 3) {
+                showToast("Gambar minimal 3 koordinat batas!", "error");
+                return;
+            }
+
+            const areaSquareMeters = calculatePolygonArea(currentDrawCoords);
+
+            document.getElementById('form-luas-bumi').value = Math.round(areaSquareMeters);
+            document.getElementById('calculated-area-text').innerText = `${Math.round(areaSquareMeters)} m²`;
+            document.getElementById('form-nop').value = `32.73.010.002.015-0${Math.floor(100 + Math.random() * 800)}.0`;
+            
+            calculateEstimatedTax();
+            toggleTanggalBayarInput();
+            
+            document.getElementById('map').classList.remove('drawing-active');
+            document.getElementById('drawing-hud').classList.add('hidden');
+            document.getElementById('object-form-modal').classList.remove('hidden');
+        }
+
+        function cancelDrawing() {
+            isDrawingMode = false;
+            clearDrawEnvironment();
+            document.getElementById('map').classList.remove('drawing-active');
+            document.getElementById('drawing-hud').classList.add('hidden');
+            showToast("Batal menggambar bidang", "warning");
+        }
+
+        function clearDrawEnvironment() {
+            drawMarkers.forEach(m => map.removeLayer(m));
+            drawMarkers = [];
+            if (drawPolygonLine) {
+                map.removeLayer(drawPolygonLine);
+                drawPolygonLine = null;
+            }
+        }
+
+        function calculatePolygonArea(coords) {
+            const latToMeters = 111320;
+            const lngToMeters = (40075000 / 360) * Math.cos(coords[0][0] * Math.PI / 180);
+
+            let areaSum = 0;
+            const len = coords.length;
+            
+            for (let i = 0; i < len; i++) {
+                const p1 = coords[i];
+                const p2 = coords[(i + 1) % len];
+                const x1 = p1[1] * lngToMeters;
+                const y1 = p1[0] * latToMeters;
+                const x2 = p2[1] * lngToMeters;
+                const y2 = p2[0] * latToMeters;
+                
+                areaSum += (x1 * y2) - (x2 * y1);
+            }
+            return Math.abs(areaSum) / 2;
+        }
+
+        function toggleTanggalBayarInput() {
+            const status = document.getElementById('form-status').value;
+            const container = document.getElementById('form-tanggal-bayar-container');
+            const input = document.getElementById('form-tanggal-bayar');
+            
+            if (status === 'Lunas') {
+                container.classList.remove('hidden');
+                input.required = true;
+                if (!input.value) {
+                    input.value = new Date().toISOString().split('T')[0];
+                }
+            } else {
+                container.classList.add('hidden');
+                input.required = false;
+                input.value = '';
+            }
+        }
+
+        // SAVE / UPDATE OBJECT IN DATABASE
+        function saveNewObject(event) {
+            event.preventDefault();
+            
+            const nop = document.getElementById('form-nop').value;
+            const nama = document.getElementById('form-nama').value;
+            const alamat = document.getElementById('form-alamat').value;
+            const luasBumi = parseFloat(document.getElementById('form-luas-bumi').value);
+            const luasBangunan = parseFloat(document.getElementById('form-luas-bang').value) || 0;
+            const njopBumi = parseFloat(document.getElementById('form-njop-bumi').value);
+            const njopBangunan = parseFloat(document.getElementById('form-njop-bang').value) || 0;
+            const status = document.getElementById('form-status').value;
+            const tanggalBayar = document.getElementById('form-tanggal-bayar').value;
+            const klasifikasi = document.getElementById('form-klasifikasi').value;
+
+            if (editingObjectId !== null) {
+                const obj = pbbDatabase.find(x => x.id === editingObjectId);
+                if (obj) {
+                    obj.nop = nop;
+                    obj.nama = nama;
+                    obj.alamat = alamat;
+                    obj.luas_bumi = luasBumi;
+                    obj.luas_bangunan = luasBangunan;
+                    obj.njop_bumi = njopBumi;
+                    obj.njop_bangunan = njopBangunan;
+                    obj.status = status;
+                    obj.tanggal_bayar = status === 'Lunas' ? tanggalBayar : '';
+                    obj.klasifikasi = klasifikasi;
+
+                    if (mapLayers[editingObjectId]) {
+                        map.removeLayer(mapLayers[editingObjectId]);
+                    }
+                    renderObjectOnMap(obj);
+                    showToast(`Data ${nama} berhasil diubah!`, "success");
+                }
+            } else {
+                const newId = pbbDatabase.length > 0 ? Math.max(...pbbDatabase.map(x => x.id)) + 1 : 1;
+                const newObject = {
+                    id: newId,
+                    nop: nop,
+                    nama: nama,
+                    alamat: alamat,
+                    luas_bumi: luasBumi,
+                    luas_bangunan: luasBangunan,
+                    njop_bumi: njopBumi,
+                    njop_bangunan: njopBangunan,
+                    status: status,
+                    tanggal_bayar: status === 'Lunas' ? tanggalBayar : '',
+                    klasifikasi: klasifikasi,
+                    coords: [...currentDrawCoords]
+                };
+
+                pbbDatabase.push(newObject);
+                renderObjectOnMap(newObject);
+                showToast(`Registrasi ${nama} berhasil!`, "success");
+            }
+
+            populateDatabase();
+            updateStatistics();
+            updateCharts();
+            updateFilteredLunasCount();
+
+            isDrawingMode = false;
+            editingObjectId = null;
+            clearDrawEnvironment();
+            closeObjectModal();
+        }
+
+        function closeObjectModal() {
+            document.getElementById('object-form-modal').classList.add('hidden');
+            document.getElementById('pbb-form').reset();
+            editingObjectId = null;
+            
+            document.getElementById('modal-title-text').innerText = "Registrasi Spasial Objek PBB";
+            document.getElementById('form-luas-bumi').setAttribute('readonly', 'true');
+            document.getElementById('form-luas-bumi').classList.add('bg-slate-50');
+            document.getElementById('form-info-coordinates').classList.remove('hidden');
+        }
+
+        function calculatePBB(luasBumi, luasBangunan, njopBumi, njopBangunan) {
+            const totalNJOPBumi = luasBumi * njopBumi;
+            const totalNJOPBangunan = luasBangunan * njopBangunan;
+            const totalNJOP = totalNJOPBumi + totalNJOPBangunan;
+            
+            const njoptkp = 12000000;
+            const dpp = Math.max(0, totalNJOP - njoptkp);
+            const rate = dpp < 1000000000 ? 0.001 : 0.002;
+            return dpp * rate;
+        }
+
+        function calculateEstimatedTax() {
+            const luasBumi = parseFloat(document.getElementById('form-luas-bumi').value) || 0;
+            const luasBang = parseFloat(document.getElementById('form-luas-bang').value) || 0;
+            const njopBumi = parseFloat(document.getElementById('form-njop-bumi').value) || 0;
+            const njopBang = parseFloat(document.getElementById('form-njop-bang').value) || 0;
+
+            const totalNJOP = (luasBumi * njopBumi) + (luasBang * njopBang);
+            const njoptkp = 12000000;
+            const dpp = Math.max(0, totalNJOP - njoptkp);
+            const estTax = calculatePBB(luasBumi, luasBang, njopBumi, njopBang);
+
+            document.getElementById('tax-total-njop').innerText = formatRupiah(totalNJOP);
+            document.getElementById('tax-dpp').innerText = formatRupiah(dpp);
+            document.getElementById('tax-estimation').innerText = formatRupiah(estTax);
+        }
+
+        // DATABASE POPULATION (SIDEBAR LIST)
+        function populateDatabase() {
+            const container = document.getElementById('tax-objects-container');
+            container.innerHTML = '';
+
+            const filteredData = pbbDatabase.filter(obj => {
+                const searchVal = document.getElementById('search-input').value.toLowerCase();
+                const matchesSearch = obj.nama.toLowerCase().includes(searchVal) || obj.nop.includes(searchVal);
+                const matchesFilter = activeFilter === 'semua' || obj.status === activeFilter;
+                return matchesSearch && matchesFilter;
+            });
+
+            if (filteredData.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-slate-400">
+                        <i data-lucide="folder-open" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
+                        <p class="text-xs">Tidak ada objek pajak</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            filteredData.forEach(obj => {
+                const taxEst = calculatePBB(obj.luas_bumi, obj.luas_bangunan, obj.njop_bumi, obj.njop_bangunan);
+                
+                let badgeClass = "bg-emerald-100 text-emerald-800";
+                if (obj.status === "Menunggak") badgeClass = "bg-rose-100 text-rose-800";
+                else if (obj.status === "Potensi") badgeClass = "bg-amber-100 text-amber-800";
+
+                const card = document.createElement('div');
+                card.className = "p-3 bg-white border border-slate-200 rounded-2xl hover:border-brand-500 hover:shadow-md cursor-pointer transition-all space-y-1.5 active:scale-[0.98]";
+                card.onclick = () => {
+                    selectAndFlyTo(obj.id);
+                    closeSidebar(); // Close navigation sidebar on click to focus on map
+                };
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <span class="text-[9px] font-mono text-slate-400">${obj.nop}</span>
+                        <span class="px-2 py-0.5 rounded text-[8px] font-bold ${badgeClass}">${obj.status}</span>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-bold text-slate-800 leading-tight">${obj.nama}</h4>
+                        <p class="text-[10px] text-slate-500 mt-0.5 leading-snug truncate">${obj.alamat}</p>
+                    </div>
+                    ${obj.status === 'Lunas' && obj.tanggal_bayar ? `
+                    <div class="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg inline-flex items-center gap-1">
+                        <i data-lucide="calendar" class="w-3 h-3"></i> Pelunasan: ${obj.tanggal_bayar}
+                    </div>
+                    ` : ''}
+                    <div class="flex justify-between items-center text-[10px] pt-1.5 border-t border-slate-100 gap-2">
+                        <div>
+                            <span class="text-slate-400">PBB:</span>
+                            <span class="font-bold text-brand-600">${formatRupiah(taxEst)}</span>
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button onclick="editObject(${obj.id}, event)" class="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-sky-600 rounded-lg transition-colors" title="Edit Data">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="deleteObject(${obj.id}, event)" class="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-rose-600 rounded-lg transition-colors" title="Hapus Objek">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function filterObjectList() {
+            populateDatabase();
+        }
+
+        function setStatusFilter(status) {
+            activeFilter = status;
+            
+            ['all', 'lunas', 'menunggak', 'potensi'].forEach(item => {
+                const btn = document.getElementById(`filter-${item}`);
+                if (item === status.toLowerCase() || (item === 'all' && status === 'semua')) {
+                    btn.className = "px-3 py-1 bg-sky-500 text-white rounded-full text-[11px] font-medium transition-colors shrink-0";
+                } else {
+                    btn.className = "px-3 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full text-[11px] font-medium transition-colors shrink-0";
+                }
+            });
+            populateDatabase();
+        }
+
+        function populateMapWithExistingData() {
+            pbbDatabase.forEach(obj => {
+                renderObjectOnMap(obj);
+            });
+        }
+
+        function selectAndFlyTo(id) {
+            const obj = pbbDatabase.find(x => x.id === id);
+            if (!obj) return;
+
+            const bounds = mapLayers[id].getBounds();
+            map.flyToBounds(bounds, { padding: [40, 40], maxZoom: 18 });
+            mapLayers[id].openPopup();
+        }
+
+        function zoomToAndDetails(id) {
+            selectAndFlyTo(id);
+        }
+
+        // ANALYTICS & STATS LOGIC
+        function updateStatistics() {
+            let totalPaid = 0;
+            let totalOwed = 0;
+            let paidCount = 0;
+            let totalCount = pbbDatabase.length;
+
+            let distRes = 0;
+            let distKom = 0;
+            let distInd = 0;
+            let distLah = 0;
+
+            pbbDatabase.forEach(obj => {
+                const pbb = calculatePBB(obj.luas_bumi, obj.luas_bangunan, obj.njop_bumi, obj.njop_bangunan);
+                if (obj.status === "Lunas") {
+                    totalPaid += pbb;
+                    paidCount++;
+                } else if (obj.status === "Menunggak") {
+                    totalOwed += pbb;
+                }
+
+                if (obj.klasifikasi === "Residensial") distRes++;
+                else if (obj.klasifikasi === "Komersial") distKom++;
+                else if (obj.klasifikasi === "Industri") distInd++;
+                else if (obj.klasifikasi === "Lahan Kosong") distLah++;
+            });
+
+            const complianceRate = totalCount > 0 ? ((paidCount / totalCount) * 100).toFixed(1) : 0;
+            const targetRevenue = 15000000;
+            const realTotalPaid = totalPaid;
+            const progressPercent = Math.min(100, (realTotalPaid / targetRevenue) * 100).toFixed(1);
+
+            document.getElementById('stat-total-pajak').innerText = formatRupiah(realTotalPaid);
+            document.getElementById('stat-kepatuhan').innerText = `${complianceRate}%`;
+            document.getElementById('progress-percent').innerText = `${progressPercent}%`;
+            document.getElementById('progress-bar').style.width = `${progressPercent}%`;
+            document.getElementById('stat-lunas-amount').innerText = formatRupiah(totalPaid);
+            document.getElementById('stat-tunggakan-amount').innerText = formatRupiah(totalOwed);
+
+            document.getElementById('dist-residensial').innerText = `${distRes} Objek`;
+            document.getElementById('dist-komersial').innerText = `${distKom} Objek`;
+            document.getElementById('dist-industri').innerText = `${distInd} Objek`;
+            document.getElementById('dist-lahan').innerText = `${distLah} Objek`;
+        }
+
+        function initCharts() {
+            const ctx = document.getElementById('complianceChart').getContext('2d');
+            
+            let lunasCount = 0;
+            let tunggakCount = 0;
+            let potensiCount = 0;
+
+            pbbDatabase.forEach(x => {
+                if (x.status === 'Lunas') lunasCount++;
+                else if (x.status === 'Menunggak') tunggakCount++;
+                else if (x.status === 'Potensi') potensiCount++;
+            });
+
+            complianceChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Lunas', 'Menunggak', 'Potensi'],
+                    datasets: [{
+                        data: [lunasCount, tunggakCount, potensiCount],
+                        backgroundColor: ['#10b981', '#f43f5e', '#f59e0b'],
+                        borderWidth: 2,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 10,
+                                font: { size: 9 }
+                            }
+                        }
+                    }
+                }
+            });
+
+            populateMapWithExistingData();
+        }
+
+        function updateCharts() {
+            if (!complianceChartInstance) return;
+
+            let lunasCount = 0;
+            let tunggakCount = 0;
+            let potensiCount = 0;
+
+            pbbDatabase.forEach(x => {
+                if (x.status === 'Lunas') lunasCount++;
+                else if (x.status === 'Menunggak') tunggakCount++;
+                else if (x.status === 'Potensi') potensiCount++;
+            });
+
+            complianceChartInstance.data.datasets[0].data = [lunasCount, tunggakCount, potensiCount];
+            complianceChartInstance.update();
+        }
+
+        // AI ASSISTANT (GEMINI INTEGRATION)
+        function prepAISubmission(mode) {
+            switchTab('ai');
+            const promptBox = document.getElementById('ai-prompt');
+            
+            if (mode === 'surat') {
+                const unpaid = pbbDatabase.find(x => x.status === "Menunggak");
+                const nopVal = unpaid ? unpaid.nop : "32.73.010.002.015-0120.0";
+                const namaVal = unpaid ? unpaid.nama : "Siti Rahmawati";
+                const alamatVal = unpaid ? unpaid.alamat : "Jl. Merdeka Baru No. 12";
+                
+                promptBox.value = `Buatkan draf surat teguran formal yang tegas namun santun untuk wajib pajak tertunggak berikut:\n- NOP: ${nopVal}\n- Nama: ${namaVal}\n- Alamat: ${alamatVal}\n- Tunggakan: Estimasi keterlambatan 1 tahun.`;
+            } else if (mode === 'analisis') {
+                promptBox.value = `Lakukan analisis strategis terhadap data sebaran wajib pajak daerah ini. Terdapat total ${pbbDatabase.length} persil terdaftar dengan tingkat kepatuhan pembayaran sekitar 78%.`;
+            }
+            
+            showToast("Templat kerja AI dimuat!", "success");
+        }
+
+        function triggerAISuratTeguran(nop) {
+            switchTab('ai');
+            const targetObj = pbbDatabase.find(x => x.nop === nop);
+            if (!targetObj) return;
+
+            const promptBox = document.getElementById('ai-prompt');
+            promptBox.value = `Tulis draf surat teguran kedinasan kepada:\nNama Wajib Pajak: ${targetObj.nama}\nNOP: ${targetObj.nop}\nAlamat Objek: ${targetObj.alamat}\nStatus: Mengunggak PBB tahun berjalan.`;
+            
+            showToast(`Menyiapkan draf AI untuk ${targetObj.nama}`, "info");
+            closeSidebar();
+        }
+
+        async function generateAIAdvice() {
+            const prompt = document.getElementById('ai-prompt').value.trim();
+            const apiKey = document.getElementById('gemini-api-key').value.trim();
+            const submitBtn = document.getElementById('ai-btn-submit');
+            const responsePanel = document.getElementById('ai-response-panel');
+            const outputText = document.getElementById('ai-output-text');
+
+            if (!prompt) {
+                showToast("Tulis instruksi terlebih dahulu", "warning");
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Memproses...`;
+            lucide.createIcons();
+
+            responsePanel.classList.remove('hidden');
+            outputText.innerText = "Kecerdasan Buatan sedang merumuskan draf/analisis...";
+
+            if (apiKey) {
+                try {
+                    const systemPrompt = "Anda adalah seorang Kepala Bidang Pendapatan Daerah & Analis Pajak handal di Indonesia. Jawab secara detail dan taktis.";
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+                    const payload = {
+                        contents: [{ parts: [{ text: prompt }] }],
+                        systemInstruction: {
+                            parts: [{ text: systemPrompt }]
+                        }
+                    };
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) throw new Error("Terjadi masalah pada pemanggilan API Gemini.");
+
+                    const result = await response.json();
+                    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (aiText) {
+                        outputText.innerText = aiText;
+                        showToast("Analisis AI Berhasil!", "success");
+                    } else {
+                        throw new Error("Respon kosong diterima.");
+                    }
+
+                } catch (error) {
+                    console.error(error);
+                    showToast(error.message, "error");
+                    outputText.innerText = `[Error API: Menggunakan Simulator Cerdas]\n\nBerikut simulasi draf:\n\n${getMockAIResponse(prompt)}`;
+                }
+            } else {
+                setTimeout(() => {
+                    outputText.innerText = getMockAIResponse(prompt);
+                    showToast("Analisis AI Disimulasikan!", "success");
+                }, 1200);
+            }
+
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<i data-lucide="sparkles" class="w-4 h-4"></i> Jalankan Instruksi AI`;
+            lucide.createIcons();
+        }
+
+        function getMockAIResponse(prompt) {
+            const dateStr = new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+            
+            if (prompt.toLowerCase().includes('surat') || prompt.toLowerCase().includes('teguran')) {
+                let nama = "Siti Rahmawati";
+                let nop = "32.73.010.002.015-0120.0";
+                let alamat = "Jl. Merdeka Baru No. 12, Babakan Surabaya";
+
+                pbbDatabase.forEach(x => {
+                    if (prompt.includes(x.nop) || prompt.toLowerCase().includes(x.nama.toLowerCase())) {
+                        nama = x.nama;
+                        nop = x.nop;
+                        alamat = x.alamat;
+                    }
+                });
+
+                return `BADAN PENDAPATAN DAERAH KOTA BANDUNG
+Nomor   : 973/ST-PBB/${new Date().getFullYear()}
+Hal     : Surat Teguran Pelunasan PBB-P2
+
+Kepada Yth.
+Bapak/Ibu: ${nama}
+NOP: ${nop}
+
+Dengan hormat,
+Berdasarkan sistem spasial kami, objek pajak di ${alamat} masih memiliki tunggakan PBB-P2. Pembayaran PBB sangat krusial bagi kelancaran pembangunan infrastruktur dan fasilitas umum daerah.
+
+Harap segera lakukan pelunasan dalam 14 hari kerja via M-Banking BJB, Tokopedia, QRIS, atau Kantor Pos terdekat.
+
+Bandung, ${dateStr}
+Kepala Bidang Pendapatan Daerah`;
+            } else {
+                return `ANALISIS STRATEGIS PAD PBB-P2
+Tanggal Analisis: ${dateStr}
+
+Rasio Kepatuhan wilayah target saat ini berada di angka ~78%. 
+Rekomendasi taktis:
+1. Lakukan audit spasial berkala (re-klassifikasi ruko/bangunan bertingkat baru).
+2. Kirim notifikasi digital berbasis geolokasi pada puncak musim pembayaran.
+3. Berikan insentif pemutihan denda di bulan HUT Kota Bandung.`;
+            }
+        }
+
+        // NAVIGATION EDIT & DELETE LOGIC
+        function editObject(id, event) {
+            if (event) event.stopPropagation();
+            const obj = pbbDatabase.find(x => x.id === id);
+            if (!obj) return;
+
+            editingObjectId = id;
+            
+            document.getElementById('modal-title-text').innerText = "Edit Registrasi Objek PBB";
+            document.getElementById('calculated-area-text').innerText = `${obj.luas_bumi} m²`;
+            document.getElementById('form-info-coordinates').classList.add('hidden'); 
+
+            document.getElementById('form-nop').value = obj.nop;
+            document.getElementById('form-nama').value = obj.nama;
+            document.getElementById('form-alamat').value = obj.alamat;
+            
+            const luasBumiEl = document.getElementById('form-luas-bumi');
+            luasBumiEl.removeAttribute('readonly');
+            luasBumiEl.classList.remove('bg-slate-50');
+            luasBumiEl.value = obj.luas_bumi;
+
+            document.getElementById('form-luas-bang').value = obj.luas_bangunan;
+            document.getElementById('form-njop-bumi').value = obj.njop_bumi;
+            document.getElementById('form-njop-bang').value = obj.njop_bangunan;
+            document.getElementById('form-klasifikasi').value = obj.klasifikasi;
+            document.getElementById('form-status').value = obj.status;
+            
+            if (obj.status === 'Lunas') {
+                document.getElementById('form-tanggal-bayar').value = obj.tanggal_bayar || '';
+            } else {
+                document.getElementById('form-tanggal-bayar').value = '';
+            }
+            toggleTanggalBayarInput();
+
+            calculateEstimatedTax();
+            document.getElementById('object-form-modal').classList.remove('hidden');
+        }
+
+        function deleteObject(id, event) {
+            if (event) event.stopPropagation();
+            const obj = pbbDatabase.find(x => x.id === id);
+            if (!obj) return;
+
+            deleteTargetId = id;
+            document.getElementById('delete-object-name').innerText = obj.nama;
+            document.getElementById('confirm-delete-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('confirm-delete-modal').classList.add('hidden');
+            deleteTargetId = null;
+        }
+
+        function executeDelete() {
+            if (deleteTargetId === null) return;
+            
+            const objIndex = pbbDatabase.findIndex(x => x.id === deleteTargetId);
+            if (objIndex === -1) return;
+
+            const obj = pbbDatabase[objIndex];
+
+            if (mapLayers[deleteTargetId]) {
+                map.removeLayer(mapLayers[deleteTargetId]);
+                delete mapLayers[deleteTargetId];
+            }
+
+            pbbDatabase.splice(objIndex, 1);
+
+            populateDatabase();
+            updateStatistics();
+            updateCharts();
+            updateFilteredLunasCount();
+            closeDeleteModal();
+
+            showToast(`Objek ${obj.nama} berhasil dihapus`, "warning");
+        }
+
+        function formatRupiah(number) {
+            return new Intl.NumberFormat("id-ID", {
+                style: "currency",
+                currency: "IDR",
+                maximumFractionDigits: 0
+            }).format(number);
+        }
+
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).innerText;
+            // Native fallback for iframe environment
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textArea);
+            showToast("Berhasil disalin ke clipboard!", "success");
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgClass = "bg-slate-800 text-white";
+            let icon = "info";
+            
+            if (type === 'success') {
+                bgClass = "bg-emerald-600 text-white";
+                icon = "check-circle";
+            } else if (type === 'error') {
+                bgClass = "bg-rose-600 text-white";
+                icon = "alert-triangle";
+            } else if (type === 'warning') {
+                bgClass = "bg-amber-500 text-white";
+                icon = "alert-circle";
+            }
+
+            toast.className = `${bgClass} p-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold pointer-events-auto transition-all duration-300 transform translate-y-2 opacity-0`;
+            toast.innerHTML = `
+                <i data-lucide="${icon}" class="w-4 h-4 shrink-0"></i>
+                <span>${message}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-[-10px]');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        function openHelpModal() {
+            document.getElementById('help-modal').classList.remove('hidden');
+        }
+
+        function closeHelpModal() {
+            document.getElementById('help-modal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
